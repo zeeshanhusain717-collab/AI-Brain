@@ -627,9 +627,10 @@ public:
         // --- Orchestrating the Final Novelist Response within 2000-Word Scope ---
         std::string refined_thought = "Z+2AI उपन्यासकार विचार:\n" + atmosphere + "\n" + poetic + "\n" + scratchpad_draft + "\n" + tension + "\n" + psychology + "\n(शिक्षा: " + moral + ")";
 
-        // --- Layer 9: Final Polish & Formatting Engine ---
-        if (!refined_thought.empty() && refined_thought.back() != '।' && refined_thought.back() != ')') {
-            refined_thought += '।';
+        // --- Layer 9: Final Polish & Formatting Engine (Fixed Unicode Literal Check) ---
+        CodePoint last_cp = lastCodePoint(refined_thought);
+        if (!refined_thought.empty() && last_cp != U'।' && last_cp != U')') {
+            refined_thought += utf8Encode(U'।' );
         }
 
         return refined_thought;
@@ -648,3 +649,4 @@ private:
 using Brain = BrainOrchestrator;
 
 } // namespace z2ai
+
