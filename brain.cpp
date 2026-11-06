@@ -654,11 +654,15 @@ public:
     }
     std::string generate(std::mt19937& rng, int maxWords = 15) const {
         if (model_.empty()) return "नमस्ते! इंजन तैयार है।";
+        
         auto it1 = model_.begin();
-        std::advance(it1, std::uniform_int_distribution<std::size_t>(0, model_.size() - 1));
+        std::uniform_int_distribution<std::size_t> dist1(0, model_.size() - 1);
+        std::advance(it1, static_cast<long>(dist1(rng))); // FIXED: Safe type-cast for Android NDK compiler
         std::string w1 = it1->first;
+        
         auto it2 = it1->second.begin();
-        std::advance(it2, std::uniform_int_distribution<std::size_t>(0, it1->second.size() - 1));
+        std::uniform_int_distribution<std::size_t> dist2(0, it1->second.size() - 1);
+        std::advance(it2, static_cast<long>(dist2(rng))); // FIXED: Safe type-cast for Android NDK compiler
         std::string w2 = it2->first;
 
         std::string out = w1 + " " + w2;
@@ -693,7 +697,6 @@ public:
     void loadCorpus(const std::string& corpus) {
         std::istringstream stream(corpus);
         std::string line;
-        std::string lastQ;
         while (std::getline(stream, line)) {
             line = trim(line);
             if (line.empty() || line[0] == '[') continue;
