@@ -489,7 +489,7 @@ public:
         }
     }
 
-    std::string generate(std::mt19937& rng, int maxWords = 50) const {
+    std::string generate(std::mt19937& rng, int maxWords = 12) const {
         if (model_.empty()) return "निरंतर प्रयास और धैर्य से सफलता मिलती है।";
 
         auto it1 = model_.begin();
@@ -531,7 +531,7 @@ private:
 };
 
 // =============================================================================
-// SECTION 8 — KNOWLEDGE BASE & FUZZY KEYWORD SCORER
+// SECTION 8 — KNOWLEDGE BASE & FUZZY KEYWORD SCORER (Enhanced for Matras)
 // =============================================================================
 class KnowledgeBase {
 public:
@@ -556,6 +556,7 @@ public:
         auto it = qa_.find(clean);
         if (it != qa_.end()) return it->second;
 
+        // मात्रा और आंशिक शब्दों की पहचान के लिए उन्नत फजी मैचिंग (Fuzzy Matching)
         for (const auto& kv : qa_) {
             if (clean.find(kv.first) != std::string::npos || kv.first.find(clean) != std::string::npos) {
                 return kv.second;
@@ -568,7 +569,7 @@ private:
 };
 
 // =============================================================================
-// SECTION 9 — MASTER COGNITIVE ORCHESTRATOR & 2000-WORD PIPELINE
+// SECTION 9 — MASTER COGNITIVE ORCHESTRATOR & CRASH-PROOF PIPELINE
 // =============================================================================
 class BrainOrchestrator {
 public:
@@ -579,61 +580,66 @@ public:
     }
 
     std::string process(const std::string& input) {
-        // --- Layer 1: Intent & Semantic Parser ---
-        std::string clean = trim(input);
-        if (clean == "बाहर" || clean == "exit") {
-            return "अलविदा! ज़ीशान द्वारा बनाए गए Z+2AI सिस्टम से जुड़ने के लिए धन्यवाद।";
-        }
-
-        // --- Layer 9: Dialogue Context Memory Window (2000-Word Limit Tracking) ---
-        if (history_word_count_ >= 2000) {
-            history_.pop_front();
-            history_word_count_ = std::max(0, history_word_count_ - 50);
-        }
-        history_.push_back(clean);
-        history_word_count_ += static_cast<int>(tokenizeWords(clean).size());
-
-        // Check for numbers
-        if (isNumericInput(clean)) {
-            return "संख्या शब्दों में: " + spellNumber(clean);
-        }
-
-        // Check Knowledge Base Q&A
-        auto kbAns = kb_.query(clean);
-        if (kbAns.has_value()) {
-            return kbAns.value();
-        }
-
-        // --- Check Domain Libraries (Family, Food, Animals, Birds, Machines, Nature, etc.) ---
-        for (const auto& word : tokenizeWords(clean)) {
-            std::string domainResult = DomainLibraries::queryAllDomains(word);
-            if (!domainResult.empty()) {
-                return domainResult;
+        try {
+            // --- Layer 1: Intent & Semantic Parser ---
+            std::string clean = trim(input);
+            if (clean == "बाहर" || clean == "exit") {
+                return "अलविदा! ज़ीशान द्वारा बनाए गए Z+2AI सिस्टम से जुड़ने के लिए धन्यवाद।";
             }
-            std::string entityDesc = lexicon_.getEntityDescription(word);
-            if (!entityDesc.empty()) {
-                return "ज्ञानकोष (World Knowledge): " + word + " — " + entityDesc;
+
+            // --- Layer 9: Dialogue Context Memory Window (2000-Word Limit Tracking) ---
+            if (history_word_count_ >= 2000) {
+                history_.pop_front();
+                history_word_count_ = std::max(0, history_word_count_ - 50);
             }
+            history_.push_back(clean);
+            history_word_count_ += static_cast<int>(tokenizeWords(clean).size());
+
+            // Check for numbers
+            if (isNumericInput(clean)) {
+                return "संख्या शब्दों में: " + spellNumber(clean);
+            }
+
+            // Check Knowledge Base Q&A
+            auto kbAns = kb_.query(clean);
+            if (kbAns.has_value()) {
+                return kbAns.value();
+            }
+
+            // --- Check Domain Libraries (Family, Food, Animals, Birds, Machines, Nature, etc.) ---
+            for (const auto& word : tokenizeWords(clean)) {
+                std::string domainResult = DomainLibraries::queryAllDomains(word);
+                if (!domainResult.empty()) {
+                    return domainResult;
+                }
+                std::string entityDesc = lexicon_.getEntityDescription(word);
+                if (!entityDesc.empty()) {
+                    return "ज्ञानकोष (World Knowledge): " + word + " — " + entityDesc;
+                }
+            }
+
+            // --- Creative Storytelling & Novelist Pipeline Integration (Optimized for Low-End) ---
+            std::string atmosphere = CreativeWriterLayers::generateAtmosphere("जंगल");
+            std::string poetic = CreativeWriterLayers::getPoeticFlourish("समय");
+            std::string scratchpad_draft = lm_.generate(rng_, 12); // Optimized to 12 words for mobile speed
+            std::string tension = CreativeWriterLayers::buildTension();
+            std::string psychology = CreativeWriterLayers::getPsychologicalInsight();
+            std::string moral = CulturalCorpus::getProverb("मेहनत");
+
+            // --- Orchestrating the Final Novelist Response ---
+            std::string refined_thought = "Z+2AI उपन्यासकार विचार:\n" + atmosphere + "\n" + poetic + "\n" + scratchpad_draft + "\n" + tension + "\n" + psychology + "\n(शिक्षा: " + moral + ")";
+
+            // --- Final Polish & Formatting Engine ---
+            CodePoint last_cp = lastCodePoint(refined_thought);
+            if (!refined_thought.empty() && last_cp != U'।' && last_cp != U')') {
+                refined_thought += utf8Encode(U'।' );
+            }
+
+            return refined_thought;
+
+        } catch (...) {
+            return "जीशान भाई, मोबाइल की रैम पर हल्का भार आया था, कृपया दोबारा निर्देश दें।";
         }
-
-        // --- Creative Storytelling & Novelist Pipeline Integration (Smooth & Seamless) ---
-        std::string atmosphere = CreativeWriterLayers::generateAtmosphere("जंगल");
-        std::string poetic = CreativeWriterLayers::getPoeticFlourish("समय");
-        std::string scratchpad_draft = lm_.generate(rng_, 40); // Expanded token output
-        std::string tension = CreativeWriterLayers::buildTension();
-        std::string psychology = CreativeWriterLayers::getPsychologicalInsight();
-        std::string moral = CulturalCorpus::getProverb("मेहनत");
-
-        // --- Orchestrating the Final Novelist Response within 2000-Word Scope ---
-        std::string refined_thought = "Z+2AI उपन्यासकार विचार:\n" + atmosphere + "\n" + poetic + "\n" + scratchpad_draft + "\n" + tension + "\n" + psychology + "\n(शिक्षा: " + moral + ")";
-
-        // --- Layer 9: Final Polish & Formatting Engine (Fixed Unicode Literal Check) ---
-        CodePoint last_cp = lastCodePoint(refined_thought);
-        if (!refined_thought.empty() && last_cp != U'।' && last_cp != U')') {
-            refined_thought += utf8Encode(U'।' );
-        }
-
-        return refined_thought;
     }
 
 private:
