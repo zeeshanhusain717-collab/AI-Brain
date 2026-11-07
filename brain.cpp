@@ -1,19 +1,27 @@
 // =============================================================================
-//  Z+2AI BRAIN — 5-Domain Ultra-Lightweight Offline Hindi Engine with 10 Stories
+//  Z+2AI BRAIN — Unified Cognitive & 10-Story Lightweight Offline Hindi Engine
 //  Architect / Creator : ज़ीशान (Zeeshan)
 //  GitHub Raw Link : https://github.com/zeeshanhusain717-collab/AI-Brain/raw/refs/heads/main/brain.cpp
 //  Optimized for Samsung Galaxy A12 (4GB RAM, 100% Crash-Free Safe JNI Singleton)
 // =============================================================================
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <chrono>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <random>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
-#include <array>
 
 #ifdef __ANDROID__
 #include <jni.h>
@@ -21,23 +29,23 @@
 
 namespace z2ai {
 
+// =============================================================================
+// SECTION 1 — UNICODE / UTF-8 & UTF-16 FOUNDATION
+// =============================================================================
 using CodePoint = char32_t;
 
-// ---------------------------------------------------------------------------
-// SECTION 1 — सुरक्षित UTF-8 / UTF-16 हेल्पर
-// ---------------------------------------------------------------------------
 inline std::vector<CodePoint> utf8Decode(const std::string& s) {
     std::vector<CodePoint> out;
     out.reserve(s.size());
     std::size_t i = 0;
     while (i < s.size()) {
-        const unsigned char c = static_cast<unsigned char>(s[i]);
-        std::size_t len;
-        CodePoint cp;
-        if (c < 0x80)              { len = 1; cp = c; }
-        else if ((c >> 5) == 0x6)  { len = 2; cp = c & 0x1F; }
-        else if ((c >> 4) == 0xE)  { len = 3; cp = c & 0x0F; }
-        else if ((c >> 3) == 0x1E) { len = 4; cp = c & 0x07; }
+        const unsigned char lead = static_cast<unsigned char>(s[i]);
+        std::size_t len = 0;
+        CodePoint cp = 0;
+        if (lead < 0x80)              { len = 1; cp = lead; }
+        else if ((lead >> 5) == 0x6)  { len = 2; cp = lead & 0x1F; }
+        else if ((lead >> 4) == 0xE)  { len = 3; cp = lead & 0x0F; }
+        else if ((lead >> 3) == 0x1E) { len = 4; cp = lead & 0x07; }
         else { out.push_back(0xFFFD); ++i; continue; }
 
         bool ok = (i + len <= s.size());
@@ -54,7 +62,7 @@ inline std::vector<CodePoint> utf8Decode(const std::string& s) {
 }
 
 inline void appendUtf8(std::string& out, CodePoint cp) {
-    if (cp == 0) return;  // NUL नहीं चाहिए
+    if (cp == 0) return;
     if (cp < 0x80) {
         out += static_cast<char>(cp);
     } else if (cp < 0x800) {
@@ -79,7 +87,6 @@ inline std::string encodeUtf8(const std::vector<CodePoint>& cps) {
     return out;
 }
 
-// UTF-16 (Java String) -> UTF-8 (सर्रोगेट पेयर सहित)
 inline std::string utf16ToUtf8(const std::u16string& u) {
     std::vector<CodePoint> cps;
     cps.reserve(u.size());
@@ -97,7 +104,6 @@ inline std::string utf16ToUtf8(const std::u16string& u) {
     return encodeUtf8(cps);
 }
 
-// UTF-8 -> UTF-16 (JNI NewString के लिए)
 inline std::u16string utf8ToUtf16(const std::string& s) {
     std::u16string out;
     for (CodePoint cp : utf8Decode(s)) {
@@ -113,9 +119,18 @@ inline std::u16string utf8ToUtf16(const std::string& s) {
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// SECTION 2 — ट्रिम, नॉर्मलाइज़, टोकनाइज़
-// ---------------------------------------------------------------------------
+inline CodePoint lastCodePoint(const std::string& s) {
+    const auto cps = utf8Decode(s);
+    return cps.empty() ? CodePoint(0) : cps.back();
+}
+
+inline std::string dropLastCodePoint(const std::string& s) {
+    if (s.empty()) return s;
+    std::size_t i = s.size() - 1;
+    while (i > 0 && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80) --i;
+    return s.substr(0, i);
+}
+
 inline bool isEdgePunct(CodePoint c) {
     return c == U' ' || c == U'\t' || c == U'\r' || c == U'\n' ||
            c == U'।' || c == U'?' || c == U'!' || c == U',' || c == U'.';
@@ -153,9 +168,53 @@ inline std::vector<std::string> tokenizeWords(const std::string& text) {
     return words;
 }
 
-// ---------------------------------------------------------------------------
-// SECTION 3 — संख्या शब्दों में
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 2 — PHONETICS & AKSHARA ENGINE
+// =============================================================================
+namespace phonetics {
+inline std::string vowelIndependent(CodePoint cp) {
+    switch (cp) {
+        case 0x0905: return "a"; case 0x0906: return "aa"; case 0x0907: return "i";
+        case 0x0908: return "ii"; case 0x0909: return "u"; case 0x090A: return "uu";
+        case 0x090B: return "ri"; case 0x090F: return "e"; case 0x0910: return "ai";
+        case 0x0913: return "o"; case 0x0914: return "au"; default: return "a";
+    }
+}
+inline std::string vowelMatra(CodePoint cp) {
+    switch (cp) {
+        case 0x093E: return "aa"; case 0x093F: return "i"; case 0x0940: return "ii";
+        case 0x0941: return "u"; case 0x0942: return "uu"; case 0x0943: return "ri";
+        case 0x0947: return "e"; case 0x0948: return "ai"; case 0x094B: return "o";
+        case 0x094C: return "au"; default: return "a";
+    }
+}
+inline const std::unordered_map<CodePoint, std::string>& consonantRoman() {
+    static const std::unordered_map<CodePoint, std::string> table = {
+        {0x0915, "k"}, {0x0916, "kh"}, {0x0917, "g"}, {0x0918, "gh"}, {0x0919, "ng"},
+        {0x091A, "ch"}, {0x091B, "chh"}, {0x091C, "j"}, {0x091D, "jh"}, {0x091E, "ny"},
+        {0x091F, "T"}, {0x0920, "Th"}, {0x0921, "D"}, {0x0922, "Dh"}, {0x0923, "N"},
+        {0x0924, "t"}, {0x0925, "th"}, {0x0926, "d"}, {0x0927, "dh"}, {0x0928, "n"},
+        {0x092A, "p"}, {0x092B, "ph"}, {0x092C, "b"}, {0x092D, "bh"}, {0x092E, "m"},
+        {0x092F, "y"}, {0x0930, "r"}, {0x0931, "R"}, {0x0932, "l"}, {0x0933, "L"},
+        {0x0935, "v"}, {0x0936, "sh"}, {0x0937, "Sh"}, {0x0938, "s"}, {0x0939, "h"}
+    };
+    return table;
+}
+} // namespace phonetics
+
+struct Akshara {
+    std::string text;
+    std::string base;
+    std::string vowel;
+    bool conjunct = false;
+    bool independent = false;
+    bool symbol = false;
+    bool halantEnd = false;
+};
+
+// =============================================================================
+// SECTION 3 — INFINITE NUMBER-TO-WORDS ENGINE
+// =============================================================================
 namespace numbers {
 const std::array<std::string, 100> kUnder100 = {{
     "शून्य","एक","दो","तीन","चार","पाँच","छह","सात","आठ","नौ",
@@ -169,44 +228,74 @@ const std::array<std::string, 100> kUnder100 = {{
     "अस्सी","इक्यासी","बयासी","तिरासी","चौरासी","पचासी","छियासी","सत्तासी","अट्ठासी","नवासी",
     "नब्बे","इक्यानवे","बानवे","तिरानवे","चौरानवे","पंचानवे","छियानवे","सत्तानवे","अट्ठानवे","निन्यानवे"
 }};
+const std::array<std::string, 8> kScales = {{"हज़ार", "लाख", "करोड़", "अरब", "खरब", "नील", "पद्म", "शंख"}};
 
-inline std::string spellInt(long long n) {
-    if (n < 100) return kUnder100[static_cast<std::size_t>(n)];
+inline std::string threeDigit(int n) {
     std::string out;
-    if (n >= 10000000) { out += spellInt(n / 10000000) + " करोड़ "; n %= 10000000; }
-    if (n >= 100000)   { out += spellInt(n / 100000) + " लाख ";     n %= 100000; }
-    if (n >= 1000)     { out += spellInt(n / 1000) + " हज़ार ";      n %= 1000; }
-    if (n >= 100)      { out += kUnder100[n / 100] + " सौ ";          n %= 100; }
-    if (n > 0)         { out += kUnder100[n]; }
-    while (!out.empty() && out.back() == ' ') out.pop_back();
+    const int h = n / 100;
+    const int r = n % 100;
+    if (h != 0) out = kUnder100[h] + " सौ";
+    if (r != 0) {
+        if (!out.empty()) out += ' ';
+        out += kUnder100[r];
+    }
+    return out;
+}
+
+inline std::string toHindi(std::string digits) {
+    const std::size_t firstNonZero = digits.find_first_not_of('0');
+    if (digits.empty() || firstNonZero == std::string::npos) return "शून्य";
+    digits.erase(0, firstNonZero);
+    if (digits.size() > 19) {
+        const std::size_t split = digits.size() - 17;
+        std::string out = toHindi(digits.substr(0, split)) + " शंख";
+        const std::string low = digits.substr(split);
+        if (low.find_first_not_of('0') != std::string::npos) out += " " + toHindi(low);
+        return out;
+    }
+    const std::size_t len = digits.size();
+    const int hundreds = std::stoi(len > 3 ? digits.substr(len - 3) : digits);
+    std::string rest = len > 3 ? digits.substr(0, len - 3) : std::string();
+    std::vector<std::string> groups;
+    for (std::size_t k = 0; !rest.empty(); ++k) {
+        const std::size_t take = rest.size() >= 2 ? 2 : 1;
+        const int g = std::stoi(rest.substr(rest.size() - take));
+        rest.erase(rest.size() - take);
+        if (g != 0) groups.push_back(kUnder100[g] + " " + kScales[k]);
+    }
+    std::vector<std::string> words(groups.rbegin(), groups.rend());
+    if (hundreds != 0) words.push_back(threeDigit(hundreds));
+    std::string out;
+    for (std::size_t i = 0; i < words.size(); ++i) {
+        if (i) out += ' ';
+        out += words[i];
+    }
     return out;
 }
 } // namespace numbers
 
 inline bool hasDigit(const std::string& s) {
     for (CodePoint c : utf8Decode(s)) {
-        if ((c >= U'0' && c <= U'9') || (c >= U'\u0966' && c <= U'\u096F')) return true;
+        if ((c >= U'0' && c <= U'9') || (c >= 0x0966 && c <= 0x096F)) return true;
     }
     return false;
 }
 
 inline std::string spellNumber(const std::string& input) {
+    const bool negative = input.find('-') != std::string::npos;
     std::string digits;
     for (CodePoint c : utf8Decode(input)) {
         if (c >= U'0' && c <= U'9') digits.push_back(static_cast<char>(c));
-        else if (c >= U'\u0966' && c <= U'\u096F') digits.push_back(static_cast<char>('0' + (c - U'\u0966')));
+        else if (c >= 0x0966 && c <= 0x096F) digits.push_back(static_cast<char>('0' + (c - 0x0966)));
     }
-    const std::size_t nz = digits.find_first_not_of('0');
-    if (digits.empty()) return "कृपया संख्या लिखें।";
-    if (nz == std::string::npos) return "संख्या शब्दों में: शून्य";
-    digits = digits.substr(nz);
-    if (digits.size() > 11) return "यह संख्या बहुत बड़ी है।";
-    return "संख्या शब्दों में: " + numbers::spellInt(std::stoll(digits));
+    if (digits.empty()) return "कृपया एक संख्या लिखिए।";
+    const std::string words = numbers::toHindi(digits);
+    return negative ? "ऋण " + words : "संख्या शब्दों में: " + words;
 }
 
-// ---------------------------------------------------------------------------
-// SECTION 4 — 5 डोमेन लाइब्रेरी
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 4 — 5 DOMAIN LIBRARY
+// =============================================================================
 inline std::string domainLookup(const std::string& word) {
     static const std::unordered_map<std::string, std::string> lib = {
         {"माता", "पारिवारिक ज्ञान: माता — परिवार की जननी और स्नेह की मूरत।"},
@@ -223,9 +312,9 @@ inline std::string domainLookup(const std::string& word) {
     return it != lib.end() ? it->second : std::string();
 }
 
-// ---------------------------------------------------------------------------
-// SECTION 5 — कॉर्पस (10 कहानियाँ + प्रश्नोत्तर)
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 5 — CORPUS (10 कहानियाँ + प्रश्नोत्तर)
+// =============================================================================
 inline const char* kCorpus = R"CORPUS(
 [क्रिएटर और प्रश्नोत्तर प्रोफ़ाइल]
 यूजर: तुम्हारा नाम क्या है? एआई: मेरा नाम Z+2AI है, जिसे ज़ीशान ने शून्य से डिज़ाइन और विकसित किया है।
@@ -266,9 +355,9 @@ inline const char* kCorpus = R"CORPUS(
 एक छोटे से बच्चे राहुल और उसके पालतू घोड़े बादल के बीच गहरी दोस्ती थी। राहुल रोज स्कूल से आने के बाद बादल के साथ खेलता था। एक बार जब राहुल तेज बुखार से पीड़ित था और अकेला घर में था, तब बादल ने दरवाजे पर पैर पटक-पटककर पड़ोसी को बुला लिया। पड़ोसी ने समय पर आकर डॉक्टर को दिखाया और राहुल ठीक हो गया। इस घटना ने साबित कर दिया कि सच्चा प्यार और दोस्ती किसी भी बंधन से परे होती है।
 )CORPUS";
 
-// ---------------------------------------------------------------------------
-// SECTION 6 — प्रश्नोत्तर
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 6 — KNOWLEDGE BASE (प्रश्नोत्तर)
+// =============================================================================
 class KnowledgeBase {
 public:
     void load(const std::string& corpus) {
@@ -310,9 +399,9 @@ private:
     std::unordered_map<std::string, std::string> qa_;
 };
 
-// ---------------------------------------------------------------------------
-// SECTION 7 — ट्रिग्राम कहानीकार
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 7 — TRIGRAM STORYTELLER (100% Crash-Proof)
+// =============================================================================
 class TrigramModel {
 public:
     void train(const std::string& text) {
@@ -354,6 +443,7 @@ public:
                 keys.push_back(kv.first);
                 weights.push_back(static_cast<double>(kv.second));
             }
+            if (weights.empty()) break;
             std::discrete_distribution<std::size_t> dist(weights.begin(), weights.end());
             const std::string w3 = keys[dist(rng)];
             out += " " + w3;
@@ -369,9 +459,9 @@ private:
             std::unordered_map<std::string, int>>> model_;
 };
 
-// ---------------------------------------------------------------------------
-// SECTION 8 — ब्रेन इंजन (सिंगलटन + थ्रेड-सेफ़)
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 8 — BRAIN ORCHESTRATOR (Singleton + Thread-Safe)
+// =============================================================================
 class Brain {
 public:
     Brain() {
@@ -423,12 +513,12 @@ inline Brain& brain() {
 
 } // namespace z2ai
 
-// ---------------------------------------------------------------------------
-// SECTION 9 — ANDROID JNI
-// ---------------------------------------------------------------------------
+// =============================================================================
+// SECTION 9 — ANDROID JNI BRIDGE (Matched with com.zeeshan.ai)
+// =============================================================================
 #ifdef __ANDROID__
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_zeeshan_z2ai_MainActivity_nativeGetAIResponse(JNIEnv* env, jobject, jstring jInput) {
+Java_com_zeeshan_ai_MainActivity_nativeGetAIResponse(JNIEnv* env, jobject, jstring jInput) {
     std::string input;
     if (jInput != nullptr) {
         const jsize n = env->GetStringLength(jInput);
@@ -452,4 +542,3 @@ Java_com_zeeshan_z2ai_MainActivity_nativeGetAIResponse(JNIEnv* env, jobject, jst
                           static_cast<jsize>(out.size()));
 }
 #endif
-
