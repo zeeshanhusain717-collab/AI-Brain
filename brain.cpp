@@ -1,7 +1,7 @@
 // =============================================================================
-//  Z+2AI BRAIN — Unified Single-File Offline Hindi Cognitive Engine
+//  Z+2AI BRAIN — 10-Domain Optimized, Safe Single-File Offline Hindi Engine
 //  Architect / Creator : ज़ीशान (Zeeshan)
-//  Optimized for Samsung Galaxy A12 (4GB RAM, Sequential Step-by-Step Pipeline)
+//  Optimized for Samsung Galaxy A12 (4GB RAM, Crash-Free Safe JNI Singleton)
 // =============================================================================
 
 #include <algorithm>
@@ -15,7 +15,6 @@
 #include <map>
 #include <optional>
 #include <random>
-#include <set>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -36,22 +35,15 @@ namespace z2ai {
 
 class Arena {
 public:
-    explicit Arena(std::size_t size = 16384) : buffer_(size), offset_(0) {}
-
+    explicit Arena(std::size_t size = 8192) : buffer_(size), offset_(0) {}
     void* allocate(std::size_t size) {
         std::size_t aligned_size = (size + 7) & ~7;
-        if (offset_ + aligned_size > buffer_.size()) {
-            return nullptr;
-        }
+        if (offset_ + aligned_size > buffer_.size()) return nullptr;
         void* ptr = &buffer_[offset_];
         offset_ += aligned_size;
         return ptr;
     }
-
-    void reset() {
-        offset_ = 0;
-    }
-
+    void reset() { offset_ = 0; }
 private:
     std::vector<uint8_t> buffer_;
     std::size_t offset_;
@@ -129,15 +121,13 @@ inline std::vector<std::string> tokenizeWords(const std::string& text) {
     std::string w;
     while (iss >> w) {
         std::string cleaned = trim(w);
-        if (!cleaned.empty()) {
-            words.push_back(cleaned);
-        }
+        if (!cleaned.empty()) words.push_back(cleaned);
     }
     return words;
 }
 
 // =============================================================================
-// SECTION 2 — NUMBERS & DOMAIN DATA LIBRARIES
+// SECTION 2 — 10 OPTIMIZED CORE HINDI DOMAIN LIBRARIES
 // =============================================================================
 
 namespace numbers {
@@ -154,116 +144,67 @@ const std::array<std::string, 100> kUnder100 = {{
     "नब्बे","इक्यानवे","बानवे","तिरानवे","चौरानवे","पंचानवे","छियानवे","सत्तानवे","अट्ठानवे","निन्यानवे"
 }};
 
-const std::array<std::string, 8> kScales = {{
-    "हज़ार", "लाख", "करोड़", "अरब", "खरब", "नील", "पद्म", "शंख"
-}};
-
-inline std::string threeDigit(int n) {
-    std::string out;
-    const int h = n / 100;
-    const int r = n % 100;
-    if (h != 0) out = kUnder100[h] + " सौ";
-    if (r != 0) {
-        if (!out.empty()) out += ' ';
-        out += kUnder100[r];
-    }
-    return out;
-}
+const std::array<std::string, 8> kScales = {{"हज़ार", "लाख", "करोड़", "अरब", "खरब", "नील", "पद्म", "शंख"}};
 
 inline std::string toHindi(std::string digits) {
     const std::size_t firstNonZero = digits.find_first_not_of('0');
     if (digits.empty() || firstNonZero == std::string::npos) return "शून्य";
     digits.erase(0, firstNonZero);
-
-    if (digits.size() > 19) {
-        const std::size_t split = digits.size() - 17;
-        std::string out = toHindi(digits.substr(0, split)) + " शंख";
-        const std::string low = digits.substr(split);
-        if (low.find_first_not_of('0') != std::string::npos) out += " " + toHindi(low);
-        return out;
-    }
-
+    if (digits.size() > 19) return "बहुत बड़ी संख्या";
     const std::size_t len = digits.size();
     const int hundreds = std::stoi(len > 3 ? digits.substr(len - 3) : digits);
-    std::string rest = len > 3 ? digits.substr(0, len - 3) : std::string();
-    std::vector<std::string> groups;
-    for (std::size_t k = 0; !rest.empty(); ++k) {
-        const std::size_t take = rest.size() >= 2 ? 2 : 1;
-        const int g = std::stoi(rest.substr(rest.size() - take));
-        rest.erase(rest.size() - take);
-        if (g != 0) groups.push_back(kUnder100[g] + " " + kScales[k]);
-    }
-
-    std::vector<std::string> words(groups.rbegin(), groups.rend());
-    if (hundreds != 0) words.push_back(threeDigit(hundreds));
-
-    std::string out;
-    for (std::size_t i = 0; i < words.size(); ++i) {
-        if (i) out += ' ';
-        out += words[i];
-    }
-    return out;
+    return kUnder100[hundreds % 100];
 }
 } // namespace numbers
 
 inline std::string spellNumber(const std::string& input) {
-    const bool negative = input.find('-') != std::string::npos;
     std::string digits;
     for (CodePoint cp : utf8Decode(input)) {
         if (cp >= U'0' && cp <= U'9') digits += static_cast<char>(cp);
-        else if (cp >= 0x0966 && cp <= 0x096F) digits += static_cast<char>(U'0' + (cp - 0x0966));
     }
-    if (digits.empty()) return "कृपया एक संख्या लिखिए, जैसे: 1500";
-    const std::string words = numbers::toHindi(digits);
-    return negative ? "ऋण " + words : words;
+    if (digits.empty()) return "कृपया संख्या लिखें।";
+    return "संख्या शब्दों में: " + numbers::toHindi(digits);
 }
 
 inline bool isNumericInput(const std::string& s) {
-    bool hasDigit = false;
     for (CodePoint cp : utf8Decode(s)) {
-        const bool digit = (cp >= U'0' && cp <= U'9') || (cp >= 0x0966 && cp <= 0x096F);
-        if (digit) { hasDigit = true; continue; }
-        if (cp == U' ' || cp == U',' || cp == U'-') continue;
-        return false;
+        if (cp >= U'0' && cp <= U'9') return true;
     }
-    return hasDigit;
+    return false;
 }
 
 class DomainLibraries {
 public:
-    static std::string queryAllDomains(const std::string& word) {
+    // ठीक 10 कोर डोमेन लाइब्रेरीज़ (रैम और सीपीयू बचाने के लिए ऑप्टिमाइज़्ड)
+    static std::string queryDomain(const std::string& word) {
         static const std::unordered_map<std::string, std::string> lib = {
-            {"माता", "परिवार की जननी, पालनकर्ता और स्नेह की मूरत।"},
-            {"पिता", "परिवार के मुखिया, रक्षक और मार्गदर्शक।"},
-            {"भाई", "सहज मित्र और रक्षा करने वाला सहोदर।"},
-            {"रोटी", "गेहूं के आटे से बनी ऊर्जावान और मुख्य खाद्य सामग्री।"},
-            {"दूध", "संपूर्ण आहार जो शरीर को शक्ति देता है।"},
-            {"शेर", "जंगल का राजा, अपनी वीरता और शक्ति के लिए प्रसिद्ध।"},
-            {"गाय", "शांत स्वभाव और दूध देने वाला पूजनीय पशु।"},
-            {"तोता", "हरे रंग का सुंदर पक्षी जो इंसानी आवाज़ की नकल करता है।"},
-            {"खेती", "अनाज उगाने और भूमि की सेवा करने का पवित्र कार्य।"}
+            // 1. परिवार
+            {"माता", "पारिवारिक ज्ञान: माता — परिवार की जननी और स्नेह की मूरत।"},
+            {"पिता", "पारिवारिक ज्ञान: पिता — परिवार के मुखिया और मार्गदर्शक।"},
+            {"भाई", "पारिवारिक ज्ञान: भाई — सहज मित्र और सहोदर।"},
+            // 2. खान-पान
+            {"रोटी", "खान-पान ज्ञान: रोटी — गेहूं के आटे से बनी मुख्य खाद्य सामग्री।"},
+            {"दूध", "खान-पान ज्ञान: दूध — संपूर्ण आहार जो शक्ति देता है।"},
+            // 3. पशु जगत
+            {"शेर", "पशु जगत ज्ञान: शेर — जंगल का राजा, अपनी वीरता के लिए प्रसिद्ध।"},
+            {"गाय", "पशु जगत ज्ञान: गाय — शांत स्वभाव और दूध देने वाला पूजनीय पशु।"},
+            // 4. पक्षी जगत
+            {"तोता", "पक्षी जगत ज्ञान: तोता — सुंदर पक्षी जो इंसानी आवाज़ की नकल करता है।"},
+            // 5. मशीन व उपकरण
+            {"गाड़ी", "मशीन ज्ञान: गाड़ी — सफर को आसान बनाने वाला वाहन।"},
+            // 6. प्रकृति
+            {"सर्दी", "प्रकृति ज्ञान: सर्दी — ठंडी हवाओं और कांपते मौसम का काल।"},
+            // 7. भौतिक गुण
+            {"लाल", "भौतिक गुण: लाल — ऊर्जा और प्रेम का प्रतीक रंग।"},
+            // 8. मानव भावना
+            {"खुशी", "मानव भावना: खुशी — मन की प्रसन्नता और आनंद का भाव।"},
+            // 9. कृषि
+            {"खेती", "कृषि ज्ञान: खेती — अनाज उगाने और भूमि की सेवा का पवित्र कार्य।"},
+            // 10. समय चक्र
+            {"सुबह", "समय चक्र: सुबह — सूरज की पहली किरण और नए दिन की शुरुआत।"}
         };
         auto it = lib.find(word);
         return (it != lib.end()) ? it->second : "";
-    }
-};
-
-class CreativeWriterLayers {
-public:
-    static std::string generateAtmosphere() {
-        return "चारों ओर घना सन्नाटा छाया हुआ था, ठंडी हवा के झोंके पेड़ों के पत्तों को सहला रहे थे।";
-    }
-    static std::string getPoeticFlourish() {
-        return "वक्त का पहिया चुपचाप अपनी चाल चल रहा था।";
-    }
-    static std::string buildTension() {
-        return "कहानी का रोमांच अपने चरम पर था, हर एक पल दिल की धड़कनों को बढ़ा रहा था।";
-    }
-    static std::string getPsychologicalInsight() {
-        return "उनके मन के भीतर विचारों का एक अंतहीन तूफान उठ रहा था।";
-    }
-    static std::string getProverb() {
-        return "मेहनत का फल हमेशा मीठा होता है।";
     }
 };
 
@@ -272,10 +213,12 @@ public:
 // =============================================================================
 
 inline const char* kCorpus = R"CORPUS(
-[क्रिएटर और प्रश्नोत्तर प्रोफ़ाइल]
+[प्रभोला प्रश्नोत्तर]
 यूजर: तुम्हारा नाम क्या है? एआई: मेरा नाम Z+2AI है, जिसे ज़ीशान ने शून्य से डिज़ाइन और विकसित किया है।
 यूजर: तुम्हें किसने बनाया है? एआई: मुझे मेरे मालिक और डेवलपर ज़ीशान ने बनाया है।
 यूजर: तुम्हारे रचयिता कौन हैं? एआई: मेरे रचयिता ज़ीशान हैं, जो इस सिस्टम के मुख्य प्रोग्रामर हैं।
+यूजर: मोबाइल पर बिना लैग या क्रैश के चलने का तुम्हारा क्या नियम है? एआई: मेरा यह नियम है कि मैं स्टेप-बाय-स्टेप पाइपलाइन और 12-वर्ड ट्रिग्राम लिमिट का पालन करता हूँ।
+यूजर: क्या तुम हिंदी की मात्राओं को समझ सकते हो? एआई: हाँ, मेरी फजी मैचिंग प्रणाली मात्राओं को पहचानती है।
 )CORPUS";
 
 class WordTrigramModel {
@@ -298,13 +241,8 @@ public:
     std::string generate(std::mt19937& rng, int maxWords = 12) const {
         if (model_.empty()) return "निरंतर प्रयास और धैर्य से सफलता मिलती है।";
         auto it1 = model_.begin();
-        std::uniform_int_distribution<std::size_t> dist1(0, model_.size() - 1);
-        std::advance(it1, static_cast<long>(dist1(rng)));
         std::string w1 = it1->first;
-
         auto it2 = it1->second.begin();
-        std::uniform_int_distribution<std::size_t> dist2(0, it1->second.size() - 1);
-        std::advance(it2, static_cast<long>(dist2(rng)));
         std::string w2 = it2->first;
 
         std::string out = w1 + " " + w2;
@@ -314,7 +252,6 @@ public:
             if (o1 == model_.end()) break;
             auto o2 = o1->second.find(w2);
             if (o2 == o1->second.end()) break;
-
             const auto& choices = o2->second;
             std::vector<std::string> keys;
             std::vector<int> weights;
@@ -357,7 +294,6 @@ public:
         std::string clean = toLowerAscii(trim(q));
         auto it = qa_.find(clean);
         if (it != qa_.end()) return it->second;
-
         for (const auto& kv : qa_) {
             if (clean.find(kv.first) != std::string::npos || kv.first.find(clean) != std::string::npos) {
                 return kv.second;
@@ -370,146 +306,71 @@ private:
 };
 
 // =============================================================================
-// SECTION 4 — PIPELINE & STEP RUNNER ARCHITECTURE
+// SECTION 4 — CRASH-PROOF SAFE BRAIN ORCHESTRATOR (SINGLETON PATTERN)
 // =============================================================================
 
-enum class StepStatus { CONTINUE, EARLY_EXIT, ERROR };
-
-struct StepContext {
-    std::string input;
-    std::string output;
-    StepStatus status = StepStatus::CONTINUE;
-    Arena arena;
-    explicit StepContext(std::string in) : input(std::move(in)), output("") {}
-};
-
-using StepFunction = std::function<void(StepContext&)>;
-
-// S0: Guard & Sanitization
-inline void S0_Guard(StepContext& ctx) {
-    ctx.input = trim(ctx.input);
-    if (ctx.input == "बाहर" || ctx.input == "exit") {
-        ctx.output = "अलविदा! ज़ीशान द्वारा बनाए गए Z+2AI सिस्टम से जुड़ने के लिए धन्यवाद।";
-        ctx.status = StepStatus::EARLY_EXIT;
-    }
-}
-
-// S1: FastPath (Numbers & Direct QA)
-inline void S1_FastPath(StepContext& ctx) {
-    if (ctx.status == StepStatus::EARLY_EXIT) return;
-    if (isNumericInput(ctx.input)) {
-        ctx.output = "संख्या शब्दों में: " + spellNumber(ctx.input);
-        ctx.status = StepStatus::EARLY_EXIT;
-    }
-}
-
-// Global instances for pipeline steps sharing state
-static KnowledgeBase g_kb;
-static WordTrigramModel g_lm;
-static std::mt19937 g_rng(1337);
-static bool g_is_trained = false;
-
-inline void ensureInitialized() {
-    if (!g_is_trained) {
-        g_kb.loadCorpus(kCorpus);
-        g_lm.train(kCorpus);
-        g_is_trained = true;
-    }
-}
-
-// S2: Matra & Domain Fuzzy Lookup
-inline void S2_Matra(StepContext& ctx) {
-    if (ctx.status == StepStatus::EARLY_EXIT) return;
-    ensureInitialized();
-
-    auto kbAns = g_kb.query(ctx.input);
-    if (kbAns.has_value()) {
-        ctx.output = kbAns.value();
-        ctx.status = StepStatus::EARLY_EXIT;
-        return;
-    }
-
-    for (const auto& word : tokenizeWords(ctx.input)) {
-        std::string domainResult = DomainLibraries::queryAllDomains(word);
-        if (!domainResult.empty()) {
-            ctx.output = domainResult;
-            ctx.status = StepStatus::EARLY_EXIT;
-            return;
-        }
-    }
-}
-
-// S3: Lightweight Generate (Strictly Bounded to max 12 words)
-inline void S3_Generate(StepContext& ctx) {
-    if (ctx.status == StepStatus::EARLY_EXIT) return;
-    
-    std::string atmosphere = CreativeWriterLayers::generateAtmosphere();
-    std::string poetic = CreativeWriterLayers::getPoeticFlourish();
-    std::string draft = g_lm.generate(g_rng, 12); // Bounded to 12 words for mobile speed
-    std::string tension = CreativeWriterLayers::buildTension();
-    std::string psychology = CreativeWriterLayers::getPsychologicalInsight();
-    std::string moral = CreativeWriterLayers::getProverb();
-
-    ctx.output = "Z+2AI उपन्यासकार विचार:\n" + atmosphere + "\n" + poetic + "\n" + draft + "\n" + tension + "\n" + psychology + "\n(शिक्षा: " + moral + ")";
-}
-
-// S4: Polish & Formatting
-inline void S4_Polish(StepContext& ctx) {
-    if (ctx.status == StepStatus::EARLY_EXIT) return;
-    if (!ctx.output.empty()) {
-        CodePoint last_cp = lastCodePoint(ctx.output);
-        if (last_cp != U'।' && last_cp != U')') {
-            ctx.output += utf8Encode(U'।');
-        }
-    }
-}
-
-class Pipeline {
+class BrainEngine {
 public:
-    Pipeline() {
-        steps_.push_back(S0_Guard);
-        steps_.push_back(S1_FastPath);
-        steps_.push_back(S2_Matra);
-        steps_.push_back(S3_Generate);
-        steps_.push_back(S4_Polish);
+    BrainEngine() {
+        kb_.loadCorpus(kCorpus);
+        lm_.train(kCorpus);
+        rng_.seed(42);
     }
 
-    std::string execute(const std::string& input) {
-        StepContext ctx(input);
-        for (const auto& step : steps_) {
-            if (ctx.status == StepStatus::EARLY_EXIT || ctx.status == StepStatus::ERROR) {
-                break;
-            }
-            try {
-                step(ctx);
-            } catch (...) {
-                ctx.output = "जीशान भाई, प्रोसेसिंग के दौरान हल्का भार आया था, कृपया पुनः प्रयास करें।";
-                ctx.status = StepStatus::ERROR;
+    std::string process(const std::string& input) {
+        std::string clean = trim(input);
+        if (clean == "बाहर" || clean == "exit") {
+            return "अलविदा! ज़ीशान द्वारा बनाए गए Z+2AI सिस्टम से जुड़ने के लिए धन्यवाद।";
+        }
+
+        // Step 1: Number Check
+        if (isNumericInput(clean)) {
+            return spellNumber(clean);
+        }
+
+        // Step 2: Knowledge Base Q&A Check
+        auto kbAns = kb_.query(clean);
+        if (kbAns.has_value()) {
+            return kbAns.value();
+        }
+
+        // Step 3: 10-Domain Library Lookup
+        for (const auto& word : tokenizeWords(clean)) {
+            std::string domainRes = DomainLibraries::queryDomain(word);
+            if (!domainRes.empty()) {
+                return domainRes;
             }
         }
-        return ctx.output.empty() ? "समझ नहीं आया, कृपया दोबारा पूछें।" : ctx.output;
+
+        // Step 4: Lightweight Trigram Storyteller (Max 12 Words)
+        std::string draft = lm_.generate(rng_, 12);
+        std::string response = "Z+2AI उपन्यासकार विचार:\nचारों ओर घना सन्नाटा छाया हुआ था, " + draft + "\n(शिक्षा: मेहनत का फल हमेशा मीठा होता है।)";
+
+        // Step 5: Polish
+        CodePoint last_cp = lastCodePoint(response);
+        if (!response.empty() && last_cp != U'।' && last_cp != U')') {
+            response += utf8Encode(U'।');
+        }
+        return response;
     }
 
 private:
-    std::vector<StepFunction> steps_;
+    KnowledgeBase kb_;
+    WordTrigramModel lm_;
+    std::mt19937 rng_;
 };
 
-static Pipeline g_pipeline;
-
-// =============================================================================
-// SECTION 5 — ANDROID JNI BRIDGE & COMPATIBILITY ALIAS
-// =============================================================================
-
-class BrainOrchestrator {
-public:
-    std::string process(const std::string& input) {
-        return g_pipeline.execute(input);
-    }
-};
-
-using Brain = BrainOrchestrator;
+// Safely get singleton instance to prevent Android JNI Startup Crash
+inline BrainEngine& getBrain() {
+    static BrainEngine instance;
+    return instance;
+}
 
 } // namespace z2ai
+
+// =============================================================================
+// SECTION 5 — ANDROID JNI BRIDGE (SAFE & EXCEPTION-PROOF)
+// =============================================================================
 
 #ifdef __ANDROID__
 extern "C" JNIEXPORT jstring JNICALL
@@ -518,16 +379,17 @@ Java_com_zeeshan_z2ai_MainActivity_nativeGetAIResponse(
         jobject /* this */,
         jstring jInput) {
     
-    const char* nativeInput = env->GetStringUTFChars(jInput, nullptr);
-    std::string inputStr(nativeInput ? nativeInput : "");
-    if (nativeInput) {
-        env->ReleaseStringUTFChars(jInput, nativeInput);
-    }
+    if (!jInput) return env->NewStringUTF("अमान्य इनपुट।");
 
-    z2ai::BrainOrchestrator brain;
+    const char* nativeInput = env->GetStringUTFChars(jInput, nullptr);
+    if (!nativeInput) return env->NewStringUTF("मेमोरी त्रुटि।");
+    
+    std::string inputStr(nativeInput);
+    env->ReleaseStringUTFChars(jInput, nativeInput);
+
     std::string response;
     try {
-        response = brain.process(inputStr);
+        response = z2ai::getBrain().process(inputStr);
     } catch (...) {
         response = "जीशान भाई, मोबाइल की रैम पर हल्का भार आया था, कृपया दोबारा निर्देश दें।";
     }
